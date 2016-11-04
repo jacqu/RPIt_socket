@@ -129,7 +129,9 @@ void *measurement_thread( void *ptr )	{
 		/* 
 		 * 
 		 * 
-		 * Insert the measurements acquisition code here 
+		 * Insert the measurements acquisition code here.
+		 * This code can used control signals safely:
+		 * they are protected by a mutex.
 		 * 
 		 * 
 		 * 
@@ -144,10 +146,10 @@ void *measurement_thread( void *ptr )	{
 		
 		/**********************************************/
 		
-		/* Fake measurements for test only. Comment this out */
+		/* Fake measurements for test only (mes = con). Comment this out. */
 		
-		for( i = 0; i < RPIT_SOCKET_MES_N; i++ )
-			mes.mes[i] = i;
+		for( i = 0; ( i < RPIT_SOCKET_MES_N ) || ( i < RPIT_SOCKET_CON_N ); i++ )
+			mes.mes[i] = con.con[i];
 			
 		pthread_mutex_unlock( &mes_mutex );	
 		
@@ -179,7 +181,7 @@ void intHandler( int dummy )	{
 	/* 
 	 * 
 	 * 
-	 * Insert measurements cleanup code here 
+	 * Insert measurements cleanup code here.
 	 * 
 	 * 
 	 * 
@@ -208,12 +210,14 @@ void intHandler( int dummy )	{
  */
 int main( void )	{
 	
-	struct addrinfo 				hints;
-	struct addrinfo 				*result, *rp;
-	int 										sfd, s, i;
-	struct sockaddr_storage peer_addr;
-	socklen_t 							peer_addr_len;
-	ssize_t 								nread;
+	struct addrinfo 							hints;
+	struct addrinfo 							*result, *rp;
+	int 													sfd, s, i;
+	struct sockaddr_storage 			peer_addr;
+	socklen_t 										peer_addr_len;
+	ssize_t 											nread;
+	struct RPIt_socket_mes_struct	local_mes;
+	struct RPIt_socket_con_struct	local_con;
 	
 	/* 
 	 * 
@@ -303,11 +307,30 @@ int main( void )	{
 	/* Wait for control datagram and answer measurement to sender */
 
 	while ( 1 ) {
+		
+		/* Read control signals from the socket */
+		
 		peer_addr_len = sizeof( struct sockaddr_storage );
-		nread = recvfrom(	sfd, (char*)&con, sizeof( con ), 0,
+		nread = recvfrom(	sfd, (char*)&local_con, sizeof( struct RPIt_socket_con_struct ), 0,
 											(struct sockaddr *)&peer_addr, &peer_addr_len );
+		
+		/* Memcopy is faster than socket read: avoid holding the mutex too long */
+		
+		pthread_mutex_lock( &mes_mutex );
+		
+		memcpy( &con, &local_con, sizeof( struct RPIt_socket_con_struct ) );
+		
 		if ( nread == -1 )	{
 			fprintf( stderr, "Function recvfrom exited with error.\n" );
+			
+			/* Clear control in case of error */
+			
+			for ( i = 0; i < RPIT_SOCKET_CON_N; i++ )
+				con.con[i] = 0.0;
+		}
+		
+		if ( nread != sizeof( struct RPIt_socket_con_struct ) )	{
+			fprintf( stderr, "Function recvfrom did not receive the expected packet size.\n" );
 			
 			/* Clear control in case of error */
 			
@@ -323,6 +346,8 @@ int main( void )	{
 			for ( i = 0; i < RPIT_SOCKET_CON_N; i++ )
 				con.con[i] = 0.0;
 		}
+		
+		pthread_mutex_unlock( &mes_mutex );
 		
 		/*
 		 * 
@@ -343,16 +368,19 @@ int main( void )	{
 		 
 		/**********************************************/
 		
-		/* Critical section : transfer of the measurements */
+		/* Critical section : copy of the measurements to a local variable */
 		
 		pthread_mutex_lock( &mes_mutex );
-		
-		if ( sendto(	sfd, (char*)&mes, sizeof( mes ), 0,
-									(struct sockaddr *)&peer_addr,
-									peer_addr_len) != sizeof( mes ) )
-			fprintf( stderr, "Error sending response.\n" );
-			
+		memcpy( &local_mes, &mes, sizeof( struct RPIt_socket_mes_struct ) );
 		pthread_mutex_unlock( &mes_mutex );	
+		
+		/* Send measurements to the socket */
+		
+		if ( sendto(	sfd, (char*)&local_mes, sizeof( struct RPIt_socket_mes_struct ), 0,
+									(struct sockaddr *)&peer_addr,
+									peer_addr_len) != sizeof( struct RPIt_socket_mes_struct ) )
+			fprintf( stderr, "Error sending measurements.\n" );
+			
 			
 	}
 		

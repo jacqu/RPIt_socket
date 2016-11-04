@@ -19,6 +19,7 @@
 #include <time.h>
 
 #define RPIT_SOCKET_DISPLAY_MES
+//#define RPIT_SOCKET_API
 
 /* Check that these definitions are identical in server code */
 
@@ -45,6 +46,7 @@ struct RPIt_socket_con_struct	{
 };
 
 struct RPIt_socket_instance_struct	{
+	unsigned char									exit_req;	// Termination request
 	unsigned char									ip1;			// IP address of the server
 	unsigned char									ip2;
 	unsigned char									ip3;
@@ -58,10 +60,8 @@ struct RPIt_socket_instance_struct	{
 
 
 
-struct RPIt_socket_instance_struct				instances[RPIT_SOCKET_MAX_INSTANCES];
+struct RPIt_socket_instance_struct				instances[RPIT_SOCKET_MAX_INSTANCES] = { { 0 } };
 unsigned int															nb_instances = 0;
-
-unsigned char															exit_req = 0;
 
 /*
  *	rpit_socket_client_ip2id : converts an ip address to instance ID
@@ -74,7 +74,7 @@ int rpit_socket_client_ip2id( 	unsigned char ip1,
 	
 	/* Scan the instance array looking for the given IP address */
 	
-	for ( i = 0; i < nb_instances; i++ )	{
+	for ( i = 0; i < RPIT_SOCKET_MAX_INSTANCES; i++ )	{
 		if (	( ip1 == instances[i].ip1 ) &&
 					(	ip2 == instances[i].ip2 ) &&
 					(	ip3 == instances[i].ip3 ) &&
@@ -83,7 +83,8 @@ int rpit_socket_client_ip2id( 	unsigned char ip1,
 	}
 	
 	/* IP address was not found */
-																					
+	
+	fprintf( stderr, "rpit_socket_client_ip2id: %d.%d.%d.%d uninitialized.\n", ip1, ip2, ip3, ip4 ); 
 	return -1;
 }
 
@@ -103,16 +104,15 @@ void* rpit_socket_client_update( void* prt )	{
   
 	while ( 1 )	{
 		
-		/* Check if exit is requested */
-		
-		if ( exit_req )
-			break;
-		
-		
 		/* Check if instance pointer is consistent */
 		
 		if ( !instance )
 			continue;
+			
+		/* Check if exit is requested */
+		
+		if ( instance->exit_req )
+			break;
 		
 		/* Wait for the thread refresh period */
 		
@@ -128,7 +128,7 @@ void* rpit_socket_client_update( void* prt )	{
 		clock_gettime( CLOCK_MONOTONIC, &before_time );
 			
 		/* Update control signals */
-				
+		
 		pthread_mutex_lock( &instance->update_mutex );
 		memcpy( &local_con, &instance->con, sizeof( struct RPIt_socket_con_struct ) );
 		pthread_mutex_unlock( &instance->update_mutex );
@@ -164,14 +164,8 @@ void* rpit_socket_client_update( void* prt )	{
 					 + (unsigned long long)after_time.tv_nsec
 				 - ( (unsigned long long)before_time.tv_sec * 1000000000
 					 + (unsigned long long)before_time.tv_nsec );
-		if ( period / 1000 > 2 * RPIT_SOCKET_PERIOD )
-			fprintf( stderr, 
-			"rpit_socket_client_update: laggy connection with %d.%d.%d.%d. Round-trip duration : %llu us\n", 
-																												instance->ip1,
-																												instance->ip2,
-																												instance->ip3,
-																												instance->ip4,
-																												period / 1000 );
+		
+		/* Check response */
 		
 		if ( nread == -1 ) {
 			fprintf( stderr, "rpit_socket_client_update: read error from %d.%d.%d.%d.\n",
@@ -223,6 +217,17 @@ void* rpit_socket_client_update( void* prt )	{
 				}
 			}
 		}
+	
+	/* Display informations about the quality of the connection */
+	
+	if ( period / 1000 > 2 * RPIT_SOCKET_PERIOD )
+		fprintf( stderr, 
+			"rpit_socket_client_update: laggy connection with %d.%d.%d.%d. Round-trip duration : %llu us\n", 
+							instance->ip1,
+							instance->ip2,
+							instance->ip3,
+							instance->ip4,
+							period / 1000 );
 	}
 	
 	return NULL;
@@ -242,6 +247,7 @@ void rpit_socket_client_add( 	unsigned char ip1,
 	struct timeval 				tv;
   char                  ip[RPIT_SIZEOF_IP];
   int										sfd;
+  int										inst_id;
   
   /* Compute IP address */
   
@@ -294,35 +300,48 @@ void rpit_socket_client_add( 	unsigned char ip1,
 	
 	/* Add connection to instances structure */
 	
-	if (nb_instances == RPIT_SOCKET_MAX_INSTANCES )
+	if ( nb_instances == RPIT_SOCKET_MAX_INSTANCES )	{
+		fprintf( stderr, "rpit_socket_client: maximum socket instances reached. Aborting.\n" );
 		return;
+	}
+	
+	/* Get first free instance pointer */
+	
+	for ( inst_id = 0; inst_id < RPIT_SOCKET_MAX_INSTANCES; inst_id++ )
+		if ( instances[inst_id].ip1 == 0 )
+			break;
+	
+	if ( inst_id == RPIT_SOCKET_MAX_INSTANCES )	{
+		fprintf( stderr, "rpit_socket_client: no more free instance left. Inernal error.\n" );
+		return;
+	}		
 		
 	/* Reset structure data */
 	
-	memset( &instances[nb_instances], 0, sizeof( struct RPIt_socket_instance_struct ) );
+	memset( &instances[inst_id], 0, sizeof( struct RPIt_socket_instance_struct ) );
 	
 	/* Initialize connection data */
 	
-	instances[nb_instances].ip1 = ip1;
-	instances[nb_instances].ip2 = ip2;
-	instances[nb_instances].ip3 = ip3;
-	instances[nb_instances].ip4 = ip4;
-	instances[nb_instances].sfd = sfd;
+	instances[inst_id].ip1 = ip1;
+	instances[inst_id].ip2 = ip2;
+	instances[inst_id].ip3 = ip3;
+	instances[inst_id].ip4 = ip4;
+	instances[inst_id].sfd = sfd;
 	
 	/* Initialize magic number in control structure */
 	
-	instances[nb_instances].con.magic = RPIT_SOCKET_MAGIC;
+	instances[inst_id].con.magic = RPIT_SOCKET_MAGIC;
 	
 	/* Initialize mutex */
 	
-	pthread_mutex_init( &instances[nb_instances].update_mutex, NULL );
+	pthread_mutex_init( &instances[inst_id].update_mutex, NULL );
 	
 	/* Start one thread for each server */
 	
-	pthread_create( &instances[nb_instances].update_thread, 
+	pthread_create( &instances[inst_id].update_thread, 
 									NULL, 
 									rpit_socket_client_update, 
-									(void*) &instances[nb_instances] );
+									(void*) &instances[inst_id] );
 	
 	/* Increment instance counter */
   
@@ -336,36 +355,181 @@ void rpit_socket_client_add( 	unsigned char ip1,
 /* 
  * rpit_socket_client_close : close communication with the server
  */
-void rpit_socket_client_close( void )	{
+void rpit_socket_client_close( 	unsigned char ip1, 
+																unsigned char ip2, 
+																unsigned char ip3, 
+																unsigned char ip4 )	{
 	
-	int i;
+	int inst_id;
+	
+	/* Get instance id */
+	
+	inst_id = rpit_socket_client_ip2id( ip1, ip2, ip3, ip4 );
+	
+	/* Check instance id */
+	
+	if ( ( inst_id < 0 ) || ( inst_id >= RPIT_SOCKET_MAX_INSTANCES ) )
+		return;
 	
 	/* Request termination of the thread */
 	
-	exit_req = 1;
+	instances[inst_id].exit_req = 1;
 
-	/* Wait for all threads to terminate */
+	/* Wait for thread to terminate */
 	
-	for ( i = 0; i < nb_instances; i++ )
-		pthread_join( instances[i].update_thread, NULL );
+	pthread_join( instances[inst_id].update_thread, NULL );
 	
-	/* Close each socket */
+	/* Close socket */
 	
-	for ( i = 0; i < nb_instances; i++ )	{
-		close( instances[i].sfd );
-		instances[i].sfd = 0;
-	}
+	close( instances[inst_id].sfd );
+	
+	/* Reset structure data */
+	
+	memset( &instances[inst_id], 0, sizeof( struct RPIt_socket_instance_struct ) );
+	
+	/* Decrement instance counter */
+	
+	nb_instances--;
 }
+
+/* 
+ * rpit_socket_client_write : write control signal to be sent to server
+ */
+void rpit_socket_client_write(	unsigned char ip1, 
+																unsigned char ip2, 
+																unsigned char ip3, 
+																unsigned char ip4,
+																double* values )	{
+	int inst_id, i;
+	
+	/* Get instance id */
+	
+	inst_id = rpit_socket_client_ip2id( ip1, ip2, ip3, ip4 );
+	
+	/* Check instance id */
+	
+	if ( ( inst_id < 0 ) || ( inst_id >= RPIT_SOCKET_MAX_INSTANCES ) )
+		return;
+	
+	/* Get current control signals */
+	
+	pthread_mutex_lock( &instances[inst_id].update_mutex );
+	for ( i = 0; i < RPIT_SOCKET_CON_N; i++ )
+		instances[inst_id].con.con[i] = values[i];
+	pthread_mutex_unlock( &instances[inst_id].update_mutex );
+	
+	return;
+}
+
+/* 
+ * rpit_socket_client_read : read measurements sent by the server
+ */
+void rpit_socket_client_read(	unsigned char ip1, 
+															unsigned char ip2, 
+															unsigned char ip3, 
+															unsigned char ip4,
+															double* values )	{
+	int inst_id, i;
+	
+	/* Get instance id */
+	
+	inst_id = rpit_socket_client_ip2id( ip1, ip2, ip3, ip4 );
+	
+	/* Check instance id */
+	
+	if ( ( inst_id < 0 ) || ( inst_id >= RPIT_SOCKET_MAX_INSTANCES ) )	{
+		for ( i = 0; i < RPIT_SOCKET_MES_N; i++ )
+			values[i] = 0.0;
+		return;
+	}
+	
+	/* Get current measurements */
+	
+	pthread_mutex_lock( &instances[inst_id].update_mutex );
+	for ( i = 0; i < RPIT_SOCKET_MES_N; i++ )
+		values[i] = instances[inst_id].mes.mes[i];
+	pthread_mutex_unlock( &instances[inst_id].update_mutex );
+	
+	return;
+} 
+ 
+#ifndef RPIT_SOCKET_API
+ 
+#define RPIT_SOCKET_IP1					127, 0, 0, 1
+#define RPIT_SOCKET_IP2					130, 79, 73, 41
+#define RPIT_SOCKET_MAIN_PERIOD	10000
+#define RPIT_SOCKET_MAIN_ITER		1000
 
 int main( void )	{
 	
-	rpit_socket_client_add( 127, 0, 0, 1 );
-	rpit_socket_client_add( 130, 79, 73, 41 );
+	int i, j;
+	double write_val[RPIT_SOCKET_CON_N], read_val[RPIT_SOCKET_MES_N];
 	
-	sleep( 10 );
+	/* Add connections */
 	
-	rpit_socket_client_close(  );
+	rpit_socket_client_add( RPIT_SOCKET_IP1 );
+	rpit_socket_client_add( RPIT_SOCKET_IP2 );
+	
+	/* Check on the fly removing and adding connection */
+	
+	rpit_socket_client_close( RPIT_SOCKET_IP1 );
+	rpit_socket_client_add( RPIT_SOCKET_IP1 );
+	
+	/* Print some iterations */
+	
+	for ( i = 0; i < RPIT_SOCKET_MAIN_ITER; i++ )	{
+		
+		usleep( RPIT_SOCKET_MAIN_PERIOD );
+		
+		/* Write iteration index on every control signals */
+		
+		for ( j = 0; j < RPIT_SOCKET_CON_N; j++ )
+			write_val[j] = (double)i;
+		
+		/* Send control signals on socket 1 */
+		
+		rpit_socket_client_write( RPIT_SOCKET_IP1, write_val );
+		
+		/* Write iteration index x -1 on every control signals */
+		
+		for ( j = 0; j < RPIT_SOCKET_CON_N; j++ )
+			write_val[j] = -(double)i;
+		
+		/* Send control signals on socket 2 */
+		
+		rpit_socket_client_write( RPIT_SOCKET_IP2, write_val );
+		
+		/* Read measurements on socket 1 */
+		
+		rpit_socket_client_read( RPIT_SOCKET_IP1, read_val );
+		
+		/* Print socket 1 measurements */
+		
+		printf( "Socket 1 mes:" );
+		for ( j = 0; j < RPIT_SOCKET_MES_N; j++ )
+			printf( "\t%d", (int)read_val[j] );
+		printf( "\n" );
+			
+		/* Read measurements on socket 2 */
+		
+		rpit_socket_client_read( RPIT_SOCKET_IP2, read_val );
+		
+		/* Print socket 2 measurements */
+		
+		printf( "Socket 2 mes:" );
+		for ( j = 0; j < RPIT_SOCKET_MES_N; j++ )
+			printf( "\t%d", (int)read_val[j] );
+		printf( "\n" );
+		
+	}
+	
+	/* Close connections */
+	
+	rpit_socket_client_close( RPIT_SOCKET_IP1 );
+	rpit_socket_client_close( RPIT_SOCKET_IP2 );
 
 return 0;
 }
+
+#endif
 
