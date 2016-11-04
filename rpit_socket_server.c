@@ -52,6 +52,7 @@
 #define RPIT_SOCKET_MAGIC					3141592	// Magic number
 
 struct RPIt_socket_mes_struct	{
+	unsigned int				magic;							// Magic number
 	unsigned long long 	timestamp;					// Absolute server time in ns 
 	double							mes[RPIT_SOCKET_MES_N];	// Measurements
 };
@@ -101,6 +102,7 @@ void *measurement_thread( void *ptr )	{
 	int									i;
 	
 	RPIt_socket_get_time( &last_time );
+	mes.magic = RPIT_SOCKET_MAGIC;
 	
 	while( 1 )	{
 		

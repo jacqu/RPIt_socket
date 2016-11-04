@@ -33,6 +33,7 @@
 #define RPIT_SOCKET_MAX_INSTANCES	5				// Max number of client instances 
 
 struct RPIt_socket_mes_struct	{
+	unsigned int				magic;							// Magic number
 	unsigned long long 	timestamp;					// Absolute server time in ns 
 	double							mes[RPIT_SOCKET_MES_N];	// Measurements
 };
@@ -183,7 +184,7 @@ void* rpit_socket_client_update( void* prt )	{
 		{
 			if ( nread != sizeof( struct RPIt_socket_mes_struct ) )
 				fprintf( stderr, 
-				"rpit_socket_client_update: received %zd bytes from %d.%d.%d.%d instead of %zd\n", 
+				"rpit_socket_client_update: received %zd bytes from %d.%d.%d.%d instead of %zd.\n", 
 																							nread, 
 																							instance->ip1,
 																							instance->ip2,
@@ -192,24 +193,34 @@ void* rpit_socket_client_update( void* prt )	{
 																							sizeof( struct RPIt_socket_mes_struct ) );
 			else
 			{
-				/* Update mes */
-				
-				pthread_mutex_lock( &instance->update_mutex );
-				memcpy( &instance->mes, &local_mes, sizeof( struct RPIt_socket_mes_struct ) );
-				pthread_mutex_unlock( &instance->update_mutex );
-				
-				/* Display measurements */
-				
-				#ifdef RPIT_SOCKET_DISPLAY_MES
-				printf( "> Server IP: %d.%d.%d.%d\n",
-								instance->ip1,
-								instance->ip2,
-								instance->ip3,
-								instance->ip4 );
-				printf( "> Timestamp : %llu\n", local_mes.timestamp );
-				for ( i = 0; i < RPIT_SOCKET_MES_N; i++ )
-					printf( "> mes[%d] = %e\n", i, local_mes.mes[i] );
-				#endif
+				if ( local_mes.magic != RPIT_SOCKET_MAGIC )
+					fprintf( stderr, 
+				"rpit_socket_client_update: received bad magic number from %d.%d.%d.%d.\n",  
+																							instance->ip1,
+																							instance->ip2,
+																							instance->ip3,
+																							instance->ip4 );
+				else
+				{
+					/* Update mes */
+					
+					pthread_mutex_lock( &instance->update_mutex );
+					memcpy( &instance->mes, &local_mes, sizeof( struct RPIt_socket_mes_struct ) );
+					pthread_mutex_unlock( &instance->update_mutex );
+					
+					/* Display measurements */
+					
+					#ifdef RPIT_SOCKET_DISPLAY_MES
+					printf( "> Server IP: %d.%d.%d.%d\n",
+									instance->ip1,
+									instance->ip2,
+									instance->ip3,
+									instance->ip4 );
+					printf( "> Timestamp : %llu\n", local_mes.timestamp );
+					for ( i = 0; i < RPIT_SOCKET_MES_N; i++ )
+						printf( "> mes[%d] = %e\n", i, local_mes.mes[i] );
+					#endif
+				}
 			}
 		}
 	}
