@@ -18,7 +18,7 @@
 #include <pthread.h>
 #include <time.h>
 
-#define RPIT_SOCKET_DISPLAY_MES
+//#define RPIT_SOCKET_DISPLAY_MES
 //#define RPIT_SOCKET_API
 
 /* Check that these definitions are identical in server code */
@@ -456,9 +456,9 @@ void rpit_socket_client_read(	unsigned char ip1,
 #ifndef RPIT_SOCKET_API
  
 #define RPIT_SOCKET_IP1					127, 0, 0, 1
-#define RPIT_SOCKET_IP2					130, 79, 73, 41
+#define RPIT_SOCKET_IP2					192, 168, 1, 35
 #define RPIT_SOCKET_MAIN_PERIOD	10000
-#define RPIT_SOCKET_MAIN_ITER		1000
+#define RPIT_SOCKET_MAIN_ITER		10
 
 int main( void )	{
 	
