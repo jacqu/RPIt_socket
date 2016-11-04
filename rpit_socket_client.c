@@ -302,6 +302,7 @@ void rpit_socket_client_add( 	unsigned char ip1,
 	
 	if ( nb_instances == RPIT_SOCKET_MAX_INSTANCES )	{
 		fprintf( stderr, "rpit_socket_client: maximum socket instances reached. Aborting.\n" );
+		close( sfd );
 		return;
 	}
 	
@@ -313,6 +314,7 @@ void rpit_socket_client_add( 	unsigned char ip1,
 	
 	if ( inst_id == RPIT_SOCKET_MAX_INSTANCES )	{
 		fprintf( stderr, "rpit_socket_client: no more free instance left. Inernal error.\n" );
+		close( sfd );
 		return;
 	}		
 		
