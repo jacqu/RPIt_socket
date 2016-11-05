@@ -52,7 +52,7 @@
 #define RPIT_SOCKET_CON_N					10			// Nb of double sent (control)
 #define RPIT_SOCKET_MES_N					10			// Nb of double returned (measurement)
 #define RPIT_SOCKET_PORT					"31415"	// Port of the sever
-#define RPIT_SOCKET_PERIOD				2000		// Sampling period of the measurement (us)
+#define RPIT_SOCKET_MES_PERIOD		2000		// Sampling period of the measurement (us)
 #define RPIT_SOCKET_MAGIC					3141592	// Magic number
 
 struct RPIt_socket_mes_struct	{
@@ -117,7 +117,7 @@ void *measurement_thread( void *ptr )	{
 			
 		/* Sleep to synchronize acquisition (adapt to your case) */
 	
-		usleep( RPIT_SOCKET_PERIOD );
+		usleep( RPIT_SOCKET_MES_PERIOD );
 		
 		/* Get current time */
 		
@@ -268,7 +268,7 @@ int main( void )	{
 	hints.ai_family = AF_UNSPEC;    /* Allow IPv4 or IPv6 */
 	hints.ai_socktype = SOCK_DGRAM; /* Datagram socket */
 	hints.ai_flags = AI_PASSIVE;    /* For wildcard IP address */
-	hints.ai_protocol = IPPROTO_TCP;
+	hints.ai_protocol = 0;					/* Any protocol */
 	hints.ai_canonname = NULL;
 	hints.ai_addr = NULL;
 	hints.ai_next = NULL;
