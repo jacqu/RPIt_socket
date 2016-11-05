@@ -15,6 +15,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <netinet/tcp.h>
 #include <netdb.h>
 #include <signal.h>
 #include <pthread.h>
@@ -213,6 +214,7 @@ int main( void )	{
 	struct addrinfo 							hints;
 	struct addrinfo 							*result, *rp;
 	int 													sfd, s, i;
+	int														one = 1;
 	struct sockaddr_storage 			peer_addr;
 	socklen_t 										peer_addr_len;
 	ssize_t 											nread;
@@ -263,7 +265,7 @@ int main( void )	{
 	hints.ai_family = AF_UNSPEC;    /* Allow IPv4 or IPv6 */
 	hints.ai_socktype = SOCK_DGRAM; /* Datagram socket */
 	hints.ai_flags = AI_PASSIVE;    /* For wildcard IP address */
-	hints.ai_protocol = 0;          /* Any protocol */
+	hints.ai_protocol = IPPROTO_TCP;
 	hints.ai_canonname = NULL;
 	hints.ai_addr = NULL;
 	hints.ai_next = NULL;
@@ -299,6 +301,10 @@ int main( void )	{
 	}
 
 	freeaddrinfo( result );			/* No longer needed */ 
+	
+		/* Set socket options */
+	
+	setsockopt( sfd, SOL_TCP, TCP_NODELAY, &one, sizeof(one) );
 	
 	/* Start measurement thread */
 	

@@ -13,6 +13,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <netinet/tcp.h>
 #include <netdb.h>
 #include <signal.h>
 #include <pthread.h>
@@ -28,7 +29,7 @@
 #define RPIT_SOCKET_PORT					"31415"	// Port of the sever
 #define RPIT_SOCKET_TIMEOUT				80000		// Server answering timeout in us
 #define RPIT_SOCKET_SERVER_START	1000000	// Server startup time in us
-#define RPIT_SOCKET_PERIOD				2000		// Period of the data update thread in us
+#define RPIT_SOCKET_PERIOD				2000		// Nominal period of the data update thread in us
 #define RPIT_SIZEOF_IP            20      // Size of an IP address
 #define RPIT_SOCKET_MAGIC					3141592	// Magic number
 #define RPIT_SOCKET_MAX_INSTANCES	5				// Max number of client instances 
@@ -116,7 +117,7 @@ void* rpit_socket_client_update( void* prt )	{
 		
 		/* Wait for the thread refresh period */
 		
-		usleep( RPIT_SOCKET_PERIOD );
+		//usleep( RPIT_SOCKET_PERIOD );
 		
 		/* Check if socket exists */
 		
@@ -248,6 +249,7 @@ void rpit_socket_client_add( 	unsigned char ip1,
   char                  ip[RPIT_SIZEOF_IP];
   int										sfd;
   int										inst_id;
+  int										one = 1;
   
   /* Compute IP address */
   
@@ -259,7 +261,7 @@ void rpit_socket_client_add( 	unsigned char ip1,
 	hints.ai_family = AF_UNSPEC;    /* Allow IPv4 or IPv6 */
 	hints.ai_socktype = SOCK_DGRAM; /* Datagram socket */
 	hints.ai_flags = 0;
-	hints.ai_protocol = 0;          /* Any protocol */
+	hints.ai_protocol = IPPROTO_TCP;
 
 	s = getaddrinfo( ip, RPIT_SOCKET_PORT, &hints, &result );
 	if ( s != 0 ) {
@@ -292,11 +294,12 @@ void rpit_socket_client_add( 	unsigned char ip1,
 
 	freeaddrinfo( result );			/* No longer needed */
 	
-	/* Set socket timeout */
+	/* Set socket options */
 	
 	tv.tv_sec =		0;
 	tv.tv_usec = 	RPIT_SOCKET_TIMEOUT;
 	setsockopt( sfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv, sizeof(struct timeval) );
+	setsockopt( sfd, SOL_TCP, TCP_NODELAY, &one, sizeof(one) );
 	
 	/* Add connection to instances structure */
 	
