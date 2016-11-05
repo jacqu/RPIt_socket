@@ -71,9 +71,9 @@ struct RPIt_socket_con_struct	con;
 unsigned char									exit_req = 0;
 
 /*
- *	RPIt_socket_get_time : get current absolute time in ns
+ *	rpit_socket_get_time : get current absolute time in ns
  */
-void RPIt_socket_get_time( struct timespec *ts )	{
+void rpit_socket_get_time( struct timespec *ts )	{
 
 	if ( !ts )
 		return;
@@ -97,12 +97,12 @@ void RPIt_socket_get_time( struct timespec *ts )	{
  *	Measurement thread. Runs asynchronously at a higher rate.
  * 	It is possible to implement signal filtering here.
  */
-void *measurement_thread( void *ptr )	{
+void *rpit_socket_server_update( void *ptr )	{
 	struct timespec 		current_time, last_time;
 	unsigned long long	period;
 	int									i;
 	
-	RPIt_socket_get_time( &last_time );
+	rpit_socket_get_time( &last_time );
 	mes.magic = RPIT_SOCKET_MAGIC;
 	
 	while( 1 )	{
@@ -118,7 +118,7 @@ void *measurement_thread( void *ptr )	{
 		
 		/* Get current time */
 		
-		RPIt_socket_get_time( &current_time );
+		rpit_socket_get_time( &current_time );
 		
 		/* Critical section */
 		
@@ -160,7 +160,9 @@ void *measurement_thread( void *ptr )	{
 														 + (unsigned long long)last_time.tv_nsec );
 		last_time = current_time;
 		
-		fprintf( stderr, "measurement_thread iteration period = %llu us.\n", period / 1000 );
+		flockfile( stderr );
+		fprintf( stderr, "rpit_socket_server_update: iteration period = %llu us.\n", period / 1000 );
+		funlockfile( stderr );
 	}
 	
 	return NULL;
@@ -169,7 +171,7 @@ void *measurement_thread( void *ptr )	{
 /*
  *	SIGINT handler
  */
-void intHandler( int dummy )	{
+void rpit_socket_server_int_handler( int dummy )	{
 	
 	/* Request termination of the thread */
 	
@@ -199,7 +201,9 @@ void intHandler( int dummy )	{
 	
 	/* Cleanup */
 	
-	fprintf( stderr, "\nMeasurement thread stopped. Cleaning up...\n" );
+	flockfile( stderr );
+	fprintf( stderr, "\nrpit_socket_server_int_handler: measurement thread stopped. Cleaning up...\n" );
+	funlockfile( stderr );
 	
 	/* Exit */
 	
@@ -258,7 +262,7 @@ int main( void )	{
 	
 	/* Initialize SIGINT handler */
 	
-	signal( SIGINT, intHandler );
+	signal( SIGINT, rpit_socket_server_int_handler );
 	
 	memset( &hints, 0, sizeof( struct addrinfo ) );
 	hints.ai_family = AF_UNSPEC;    /* Allow IPv4 or IPv6 */
@@ -272,7 +276,9 @@ int main( void )	{
 	s = getaddrinfo( NULL, RPIT_SOCKET_PORT, &hints, &result );
 	
 	if ( s != 0 ) {
-		fprintf( stderr, "Function getaddrinfo returned: %s\n", gai_strerror( s ) );
+		flockfile( stderr );
+		fprintf( stderr, "rpit_socket_server: function getaddrinfo returned: %s\n", gai_strerror( s ) );
+		funlockfile( stderr );
 		exit( EXIT_FAILURE );
 	 }
 	 
@@ -295,7 +301,9 @@ int main( void )	{
 	}
 
 	if ( rp == NULL ) {					/* No address succeeded */
-		fprintf( stderr, "Could not bind. Aborting.\n" );
+		flockfile( stderr );
+		fprintf( stderr, "rpit_socket_server: could not bind. Aborting.\n" );
+		funlockfile( stderr );
 		exit( EXIT_FAILURE );
 	}
 
@@ -303,7 +311,7 @@ int main( void )	{
 	
 	/* Start measurement thread */
 	
-	pthread_create( &mes_thread, NULL, measurement_thread, (void*) NULL );
+	pthread_create( &mes_thread, NULL, rpit_socket_server_update, (void*) NULL );
 	
 	/* Wait for control datagram and answer measurement to sender */
 
@@ -322,7 +330,9 @@ int main( void )	{
 		memcpy( &con, &local_con, sizeof( struct RPIt_socket_con_struct ) );
 		
 		if ( nread == -1 )	{
-			fprintf( stderr, "Function recvfrom exited with error.\n" );
+			flockfile( stderr );
+			fprintf( stderr, "rpit_socket_server: function recvfrom exited with error.\n" );
+			funlockfile( stderr );
 			
 			/* Clear control in case of error */
 			
@@ -331,7 +341,9 @@ int main( void )	{
 		}
 		
 		if ( nread != sizeof( struct RPIt_socket_con_struct ) )	{
-			fprintf( stderr, "Function recvfrom did not receive the expected packet size.\n" );
+			flockfile( stderr );
+			fprintf( stderr, "rpit_socket_server: function recvfrom did not receive the expected packet size.\n" );
+			funlockfile( stderr );
 			
 			/* Clear control in case of error */
 			
@@ -340,7 +352,9 @@ int main( void )	{
 		}
 										
 		if ( con.magic != RPIT_SOCKET_MAGIC )	{
-			printf( "Magic number problem. Expected %d but received %d.\n", RPIT_SOCKET_MAGIC, con.magic );
+			flockfile( stderr );
+			fprintf( stderr, "rpit_socket_server: magic number problem. Expected %d but received %d.\n", RPIT_SOCKET_MAGIC, con.magic );
+			funlockfile( stderr );
 			
 			/* Clear control in case of error */
 			
@@ -379,10 +393,11 @@ int main( void )	{
 		
 		if ( sendto(	sfd, (char*)&local_mes, sizeof( struct RPIt_socket_mes_struct ), 0,
 									(struct sockaddr *)&peer_addr,
-									peer_addr_len) != sizeof( struct RPIt_socket_mes_struct ) )
-			fprintf( stderr, "Error sending measurements.\n" );
-			
-			
+									peer_addr_len) != sizeof( struct RPIt_socket_mes_struct ) )	{
+			flockfile( stderr );
+			fprintf( stderr, "rpit_socket_server: error sending measurements.\n" );
+			funlockfile( stderr );
+		}		
 	}
 		
 	exit( EXIT_SUCCESS );
