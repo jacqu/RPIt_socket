@@ -23,9 +23,6 @@
 #ifdef __MACH__
 #include <mach/clock.h>
 #include <mach/mach.h>
-#ifndef SOL_TCP
-	#define SOL_TCP IPPROTO_TCP
-#endif
 #endif
 
 /* 
@@ -217,7 +214,6 @@ int main( void )	{
 	struct addrinfo 							hints;
 	struct addrinfo 							*result, *rp;
 	int 													sfd, s, i;
-	int														one = 1;
 	struct sockaddr_storage 			peer_addr;
 	socklen_t 										peer_addr_len;
 	ssize_t 											nread;
@@ -304,10 +300,6 @@ int main( void )	{
 	}
 
 	freeaddrinfo( result );			/* No longer needed */ 
-	
-		/* Set socket options */
-	
-	setsockopt( sfd, SOL_TCP, TCP_NODELAY, &one, sizeof(one) );
 	
 	/* Start measurement thread */
 	
