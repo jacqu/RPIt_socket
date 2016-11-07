@@ -27,8 +27,8 @@
 #define RPIT_SOCKET_CON_N					10			// Nb of double sent (control)
 #define RPIT_SOCKET_MES_N					10			// Nb of double returned (measurement)
 #define RPIT_SOCKET_PORT					"31415"	// Port of the server
-#define RPIT_SOCKET_TIMEOUT				100000	// Server answering timeout in us
-#define RPIT_SOCKET_SERVER_START	500000	// Server startup time in us
+#define RPIT_SOCKET_TIMEOUT				1000000	// Server answering timeout in us
+#define RPIT_SOCKET_SERVER_START	1000000	// Server startup time in us
 #define RPIT_SIZEOF_IP            20      // Size of an IP address
 #define RPIT_SOCKET_MAGIC					3141592	// Magic number
 #define RPIT_SOCKET_MAX_INSTANCES	5				// Max number of client instances 
@@ -99,6 +99,7 @@ void* rpit_socket_client_update( void* prt )	{
 	ssize_t                   		nread;
 	struct timespec           		before_time, after_time;
   struct RPIt_socket_mes_struct	local_mes;
+  struct RPIt_socket_con_struct	local_con;
 	#ifdef RPIT_SOCKET_DISPLAY_MES
 	int                       		i;
 	unsigned long long        		period;
@@ -124,6 +125,34 @@ void* rpit_socket_client_update( void* prt )	{
 		/* Get time before sending request */
 		
 		clock_gettime( CLOCK_MONOTONIC, &before_time );
+		
+		/* Update control signals */
+		
+		pthread_mutex_lock( &instance->update_mutex );
+		memcpy( &local_con, &instance->con, sizeof( struct RPIt_socket_con_struct ) );
+		pthread_mutex_unlock( &instance->update_mutex );
+		
+		/* Update timestamp */
+		
+		local_con.timestamp = (unsigned long long)before_time.tv_sec * 1000000000
+												+ (unsigned long long)before_time.tv_nsec;
+		
+		/* 
+			Send control packet and read measurement packet from server.
+		*/
+		
+		if (	write(	instance->sfd, 
+									(char*)&local_con, 
+									sizeof( struct RPIt_socket_con_struct ) ) != 
+					sizeof( struct RPIt_socket_con_struct ) )	{
+			flockfile( stderr );
+			fprintf( stderr, "rpit_socket_client_update: partial/failed write on %d.%d.%d.%d.\n",
+																												instance->ip1,
+																												instance->ip2,
+																												instance->ip3,
+																												instance->ip4 );
+			funlockfile( stderr );
+		}
 		
 		/* 
 			Read measurement packet from server.
@@ -200,7 +229,7 @@ void* rpit_socket_client_update( void* prt )	{
 														instance->ip3,
 														instance->ip4 );
 					fprintf( stderr, "> Timestamp: %llu\n", local_mes.timestamp );
-					fprintf( stderr, "> Period: %llu us\n", period / 1000 );
+					fprintf( stderr, "> Ping: %llu us\n", period / 1000 );
 					for ( i = 0; i < RPIT_SOCKET_MES_N; i++ )
 						fprintf( stderr, "> mes[%d] = %e\n", i, local_mes.mes[i] );
 					funlockfile( stderr );
@@ -228,7 +257,6 @@ void rpit_socket_client_add( 	unsigned char ip1,
   char                  ip[RPIT_SIZEOF_IP];
   int										sfd;
   int										inst_id;
-  double								null_values[RPIT_SOCKET_CON_N] = { 0.0 };
   
   /* Compute IP address */
   
@@ -338,27 +366,7 @@ void rpit_socket_client_add( 	unsigned char ip1,
   
   nb_instances++;
   
-  /* Reset control signals to 0 */
-  
-  rpit_socket_client_write(	instances[inst_id].ip1, 
-														instances[inst_id].ip2, 
-														instances[inst_id].ip3, 
-														instances[inst_id].ip4,
-														null_values );
-  
   /* Wait so that the server periodic thread can update the measurement */
-  
-  usleep( RPIT_SOCKET_SERVER_START );
-  
-  /* Send another null control signal to get an up-to-date measurement */
-  
-  rpit_socket_client_write(	instances[inst_id].ip1, 
-														instances[inst_id].ip2, 
-														instances[inst_id].ip3, 
-														instances[inst_id].ip4,
-														null_values );
-	
-	/* Wait so that the client periodic thread can update the measurement */
   
   usleep( RPIT_SOCKET_SERVER_START );
 }
@@ -372,11 +380,6 @@ void rpit_socket_client_close( 	unsigned char ip1,
 																unsigned char ip4 )	{
 	
 	int 						inst_id;
-	double					null_values[RPIT_SOCKET_CON_N] = { 0.0 };
-	
-	/* Reset control signals to 0 */
-  
-  rpit_socket_client_write(	ip1, ip2, ip3, ip4, null_values );
 	
 	/* Get instance id */
 	
@@ -417,7 +420,6 @@ void rpit_socket_client_write(	unsigned char ip1,
 																unsigned char ip4,
 																double* values )	{
 	int 							inst_id, i;
-	struct timespec   timestamp;
 	
 	/* Get instance id */
 	
@@ -430,31 +432,10 @@ void rpit_socket_client_write(	unsigned char ip1,
 	
 	/* Set current control signals */
 	
+	pthread_mutex_lock( &instances[inst_id].update_mutex );
 	for ( i = 0; i < RPIT_SOCKET_CON_N; i++ )
 		instances[inst_id].con.con[i] = values[i];
-	
-	/* Set control signal timestamp */
-	
-	clock_gettime( CLOCK_MONOTONIC, &timestamp );
-	instances[inst_id].con.timestamp = (unsigned long long)timestamp.tv_sec * 1000000000
-												+ (unsigned long long)timestamp.tv_nsec;
-	
-	/* 
-			Send control signal packet to the server.
-	*/
-		
-	if (	write(	instances[inst_id].sfd, 
-								(char*)&instances[inst_id].con, 
-								sizeof( struct RPIt_socket_con_struct ) ) != 
-				sizeof( struct RPIt_socket_con_struct ) )	{
-		flockfile( stderr );
-		fprintf( stderr, "rpit_socket_client_write: partial/failed write on %d.%d.%d.%d.\n",
-																											instances[inst_id].ip1,
-																											instances[inst_id].ip2,
-																											instances[inst_id].ip3,
-																											instances[inst_id].ip4 );
-		funlockfile( stderr );				
-	}
+	pthread_mutex_unlock( &instances[inst_id].update_mutex );			
 	
 	return;
 }

@@ -51,6 +51,7 @@
 #define RPIT_SOCKET_PORT					"31415"	// Port of the server
 #define RPIT_SOCKET_MES_PERIOD		2000		// Sampling period of the measurement (us)
 #define RPIT_SOCKET_MAGIC					3141592	// Magic number
+#define RPIT_SOCKET_WATCHDOG_TRIG	1000000	// Delay in us before watchdog is triggered
 
 struct RPIt_socket_mes_struct	{
 	unsigned int				magic;							// Magic number
@@ -101,6 +102,9 @@ void *rpit_socket_server_update( void *ptr )	{
 	struct timespec 		current_time, last_time;
 	unsigned long long	period;
 	int									i;
+	unsigned long long	watchdog_counter = 0;
+	unsigned long long	last_timestamp = 0;
+	
 	
 	rpit_socket_get_time( &last_time );
 	mes.magic = RPIT_SOCKET_MAGIC;
@@ -151,7 +155,27 @@ void *rpit_socket_server_update( void *ptr )	{
 		
 		for( i = 0; ( i < RPIT_SOCKET_MES_N ) || ( i < RPIT_SOCKET_CON_N ); i++ )
 			mes.mes[i] = con.con[i];
+		
+		/* Whatchdog: if control signals are not updated, force them to 0 */
+		
+		if ( last_timestamp == con.timestamp )
+			watchdog_counter++;
+		else
+			watchdog_counter = 0;
+		
+		last_timestamp = con.timestamp;
+		
+		if ( watchdog_counter >= ( RPIT_SOCKET_WATCHDOG_TRIG / RPIT_SOCKET_MES_PERIOD ) )	{
 			
+			flockfile( stderr );
+			fprintf( stderr, "rpit_socket_server_update: watchdog triggered (%ds).\n",
+												(int)( ( watchdog_counter * RPIT_SOCKET_MES_PERIOD ) / 1000000 ) );
+			funlockfile( stderr );
+			
+			for( i = 0; i < RPIT_SOCKET_CON_N; i++ )
+				con.con[i] = 0.0;
+		}
+	
 		pthread_mutex_unlock( &mes_mutex );	
 		
 		/* Display period */
