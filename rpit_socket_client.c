@@ -307,8 +307,8 @@ void rpit_socket_client_add( 	unsigned char ip1,
 	
 	/* Set socket options */
 	
-	tv.tv_sec =		0;
-	tv.tv_usec = 	RPIT_SOCKET_TIMEOUT;
+	tv.tv_sec =		RPIT_SOCKET_TIMEOUT / 1000000;
+	tv.tv_usec = 	RPIT_SOCKET_TIMEOUT % 1000000;
 	setsockopt( sfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv, sizeof(struct timeval) );
 	
 	/* Add connection to instances structure */
@@ -475,7 +475,7 @@ void rpit_socket_client_read(	unsigned char ip1,
 #ifndef RPIT_SOCKET_API
  
 #define RPIT_SOCKET_IP1					127, 0, 0, 1
-#define RPIT_SOCKET_IP2					192, 168, 1, 35
+#define RPIT_SOCKET_IP2					10, 0, 1, 3
 #define RPIT_SOCKET_MAIN_PERIOD	10000
 #define RPIT_SOCKET_MAIN_ITER		10
 
@@ -524,10 +524,12 @@ int main( void )	{
 		
 		/* Print socket 1 measurements */
 		
-		printf( "Socket 1 mes:" );
+		flockfile( stderr );
+		fprintf( stderr, "Socket 1 mes:" );
 		for ( j = 0; j < RPIT_SOCKET_MES_N; j++ )
-			printf( "\t%d", (int)read_val[j] );
-		printf( "\n" );
+			fprintf( stderr, "\t%d", (int)read_val[j] );
+		fprintf( stderr, "\n" );
+		funlockfile( stderr );
 			
 		/* Read measurements on socket 2 */
 		
@@ -535,10 +537,12 @@ int main( void )	{
 		
 		/* Print socket 2 measurements */
 		
-		printf( "Socket 2 mes:" );
+		flockfile( stderr );
+		fprintf( stderr, "Socket 2 mes:" );
 		for ( j = 0; j < RPIT_SOCKET_MES_N; j++ )
-			printf( "\t%d", (int)read_val[j] );
-		printf( "\n" );
+			fprintf( stderr, "\t%d", (int)read_val[j] );
+		fprintf( stderr, "\n" );
+		funlockfile( stderr );
 		
 	}
 	
