@@ -31,7 +31,7 @@
 #define RPIT_SOCKET_SERVER_START	1000000	// Server startup time in us
 #define RPIT_SIZEOF_IP            20      // Size of an IP address
 #define RPIT_SOCKET_MAGIC					3141592	// Magic number
-#define RPIT_SOCKET_MAX_INSTANCES	5				// Max number of client instances 
+#define RPIT_SOCKET_MAX_INSTANCES	10			// Max number of client instances 
 
 struct RPIt_socket_mes_struct	{
 	unsigned int				magic;							// Magic number
