@@ -18,7 +18,7 @@ void rpit_socket_client_write(	unsigned char ip1,
 																unsigned char ip2, 
 																unsigned char ip3, 
 																unsigned char ip4,
-																double* values );
+																const double* values );
 void rpit_socket_client_read(		unsigned char ip1, 
 																unsigned char ip2, 
 																unsigned char ip3, 
