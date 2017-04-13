@@ -153,7 +153,7 @@ void *rpit_socket_server_update( void *ptr )	{
 		
 		/* Fake measurements for test only (mes = con). Comment this out. */
 		
-		for( i = 0; ( i < RPIT_SOCKET_MES_N ) || ( i < RPIT_SOCKET_CON_N ); i++ )
+		for( i = 0; ( i < RPIT_SOCKET_MES_N ) && ( i < RPIT_SOCKET_CON_N ); i++ )
 			mes.mes[i] = con.con[i];
 		
 		/* Whatchdog: if control signals are not updated, force them to 0 */
