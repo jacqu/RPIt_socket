@@ -46,8 +46,8 @@
 
 /* Check that these definitions are identical in client code */
 
-#define RPIT_SOCKET_CON_N					10			// Nb of double sent (control)
-#define RPIT_SOCKET_MES_N					10			// Nb of double returned (measurement)
+#define RPIT_SOCKET_CON_N					150			// Nb of double sent (control)
+#define RPIT_SOCKET_MES_N					150			// Nb of double returned (measurement)
 #define RPIT_SOCKET_PORT					"31415"	// Port of the server
 #define RPIT_SOCKET_MES_PERIOD		2000		// Sampling period of the measurement (us)
 #define RPIT_SOCKET_MAGIC					3141592	// Magic number
