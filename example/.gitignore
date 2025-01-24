@@ -1,0 +1,4 @@
+*~
+*.o
+sensor_stream
+rpit_socket_server
